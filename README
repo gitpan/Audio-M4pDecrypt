@@ -1,0 +1,28 @@
+NAME
+
+Audio::M4pDecrypt -- DRMS decryption of Apple iTunes style MP4 player files
+
+DESCRIPTION
+    
+Perl port of the DeDRMS.cs program by Jon Lech Johansen
+
+SYNOPSIS
+
+use Audio::M4pDecrypt;
+
+my $mp4file = 'myfile';
+my $outfile = 'mydecodedfile';
+my $deDRMS = new Audio::M4pDecrypt;
+$deDRMS->DeDRMS($mp4file, $outfile);
+
+
+
+To install the module...
+
+perl Makefile.PL
+make
+make test
+make install
+
+
+If you are on a windows box you should use 'nmake' rather than 'make'.

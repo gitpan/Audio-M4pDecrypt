@@ -1,0 +1,10 @@
+MANIFEST
+LICENSE
+README
+Todo
+Changes
+lib/Audio/M4pDecrypt.pm
+bin/M4pDecrypt.pl
+t/01_test.t
+Makefile.PL
+META.yml                                 Module meta-data (added by MakeMaker)

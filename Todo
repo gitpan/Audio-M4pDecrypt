@@ -1,0 +1,5 @@
+TODO list for Perl module Audio::M4pDecrypt
+    - Needs to work on lots of platforms
+    - Needs some benchmarking for optimization
+
+
