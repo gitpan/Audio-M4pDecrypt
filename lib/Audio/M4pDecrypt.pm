@@ -5,10 +5,10 @@ use strict;
 use warnings;
 use Carp;
 use vars qw($VERSION);
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 use Crypt::Rijndael;
-use Digest::MD5 qw(md5);
+use Digest::MD5;
 
 my ( $AtomDRMS, $AtomMP4A, $AtomSINF, $AtomUSER, $AtomKEY, 
      $AtomIVIV, $AtomNAME, $AtomPRIV, $AtomSTSZ, $AtomMDAT ) =
@@ -22,18 +22,14 @@ sub new {
     foreach my $k (qw( strHome sPfix dirSep )) 
       { $self->{$k} = $args{$k} if $args{$k} }
     unless($self->{strHome}) {
-        if($^O =~ /Mac|Unix|linux/i) { $self->{strHome} = '~' }
-        elsif ($^O =~ /Win/i) {
-            no warnings;
-            require Win32::TieRegistry;
-            $self->{strHome} =
-                $Win32::TieRegistry::Registry->
-                    {"HKEY_CURRENT_USER\\Volatile Environment\\\\APPDATA"} ||
-                        croak "Cannot get the APPDATA file directory.";
-        }
-        else { croak "Cannot find application home directory for drms." }
+        if($ENV{APPDATA}) { $self->{strHome} = $ENV{APPDATA} }
+        elsif($ENV{HOME}) { $self->{strHome} = $ENV{HOME} }
+        else { $self->{strHome} = '~' }
     }
-    $self->{sPfix} ||= ( ($^O =~ /Unix|linux|Mac/i) ? '.' : '' );
+    unless($self->{sPfix}) {
+        if($^O =~ /Win/) { $self->{sPfix} = '' }
+        else { $self->{sPfix} = '.' }
+    }
     $self->{dirSep} ||= '/';
     return $self;
 }
@@ -160,7 +156,7 @@ my $cs_conparam = Audio::M4pDecrypt->new(
 Optional arguments: strHome is the directory containing the keyfile directory.
 After running VLC on a .m4p file under Windows, MacOS X, and Linux, this should
 be found by the module automatically (APPDATA dir under Win32, ~/ under OS X and 
-Linux). sPfix is '.' for MacOS/*nix, otherwise nil. dirSep is the char that 
+Linux). sPfix is '.' for MacOS/*nix, nil with Windows. dirSep is the char that 
 separates directories, often /.
 
 =item B<DeDRMS>

@@ -12,5 +12,5 @@ Revision history for Perl module Audio::M4pDecrypt
 0.04 Tue June 15 2004
     - upgraded to ITunes 4.6, added fix
     
-    
-        
+0.05 Mon July 12 2004
+    - removed some OS specific code in new() to allow Solaris to use
