@@ -3,8 +3,9 @@ package Audio::M4pDecrypt;
 require 5.004;
 use strict;
 use warnings;
+use Carp;
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.04';
 
 use Crypt::Rijndael;
 use Digest::MD5 qw(md5);
@@ -16,8 +17,8 @@ my ( $AtomDRMS, $AtomMP4A, $AtomSINF, $AtomUSER, $AtomKEY,
 
 sub new {
     my($class, %args) = @_;
-	my $self = {};
-	bless($self, $class);
+    my $self = {};
+    bless($self, $class);
     foreach my $k (qw( strHome sPfix dirSep )) 
       { $self->{$k} = $args{$k} if $args{$k} }
     unless($self->{strHome}) {
@@ -28,9 +29,9 @@ sub new {
             $self->{strHome} =
                 $Win32::TieRegistry::Registry->
                     {"HKEY_CURRENT_USER\\Volatile Environment\\\\APPDATA"} ||
-                        die "Cannot get the APPDATA file directory.";
+                        croak "Cannot get the APPDATA file directory.";
         }
-        else { die "Cannot find application home directory for drms." }
+        else { croak "Cannot find application home directory for drms." }
     }
     $self->{sPfix} ||= ( ($^O =~ /Unix|linux|Mac/i) ? '.' : '' );
     $self->{dirSep} ||= '/';
@@ -40,7 +41,7 @@ sub new {
 sub GetAtomPos {
     my($self, $atom) = @_;
     my $idx = index($self->{sbuffer}, substr($atom, 0, 4));
-    if($idx >= 0) { return $idx } else { die "Atom $atom not found." } 
+    if($idx >= 0) { return $idx } else { croak "Atom $atom not found." } 
 }
 
 sub GetAtomSize {
@@ -55,9 +56,8 @@ sub GetAtomData {
 }
 
 sub Decrypt {
-    my($self, $cipherText, $offset, $count, $alg, $iv) = @_;
+    my($self, $cipherText, $offset, $count, $alg) = @_;
     my $len = int($count / 16) * 16;
-    $alg->set_iv($iv);
     substr( $$cipherText, $offset, $len, 
       $alg->decrypt(substr($$cipherText, $offset, $len)) );
 }
@@ -65,11 +65,11 @@ sub Decrypt {
 sub GetUserKey {
     my($self, $userID, $keyID) = @_;
     my ($userKey, $strFile, $fh);
-    $strFile = sprintf("%s%s%sdrms%s%08X.%03d", $self->{strHome}, $self->{dirSep}, 
-      $self->{sPfix}, $self->{dirSep}, $userID, $keyID);
-    open($fh, '<', $strFile) or die "Cannot open file $strFile: $!";
+    $strFile = sprintf("%s%s%sdrms%s%08X.%03d", $self->{strHome}, 
+      $self->{dirSep}, $self->{sPfix}, $self->{dirSep}, $userID, $keyID);
+    open($fh, '<', $strFile) or croak "Cannot open file $strFile: $!";
     binmode $fh;
-    read($fh, $userKey, -s $strFile) or die "Cannot read user keyfile: $!";
+    read($fh, $userKey, -s $strFile) or croak "Cannot read user keyfile: $!";
     return $userKey;
 }
 
@@ -77,20 +77,15 @@ sub GetSampleTable {
     my($self) = @_;
     my $adSTSZ = $self->GetAtomData($self->GetAtomPos($AtomSTSZ), 1);
     my $sampleCount = unpack('L', substr($adSTSZ, 8, 4));
-    my @samples;
-    for(my $i = 0; $i < $sampleCount; $i++) {
-        my $s = unpack( 'L', substr($adSTSZ, 12 + ($i * 4), 4) );
-        push @samples, $s;
-    }
+    my @samples = unpack( 'L*', substr($adSTSZ, 12, 12 + ($sampleCount * 4)) );
     return \@samples;
 }
 
 sub DeDRMS {
     my ($self, $infile, $outfile) = @_;
-    my($iv, $key, $infh, $outfh);
-    open($infh, '<', $infile) or die "Cannot open $infile: $!";
+    open(my $infh, '<', $infile) or croak "Cannot open $infile: $!";
     binmode $infh;
-    read($infh, $self->{sbuffer}, -s $infile) or die "Cannot get buffer: $!";
+    read($infh, $self->{sbuffer}, -s $infile) or croak "Cannot get buffer: $!";
     close $infh;
     my $apDRMS = $self->GetAtomPos($AtomDRMS);
     my $apSINF = $self->GetAtomPos($AtomSINF);
@@ -108,19 +103,21 @@ sub DeDRMS {
     my $md5Hash = new Digest::MD5;
     $md5Hash->add( substr($adNAME, 0, index($adNAME, "\0")), $adIVIV );
     my $alg = new Crypt::Rijndael($userKey, Crypt::Rijndael::MODE_CBC);
-    $self->Decrypt(\$adPRIV, 0, length($adPRIV), $alg, $md5Hash->digest);
-    unless($adPRIV =~ /^itun/) { die "Decryption of 'priv' atom failed." }
-    $key = substr($adPRIV, 24, 16);
-    $iv = substr($adPRIV, 48, 16);
+    $alg->set_iv($md5Hash->digest);
+    $self->Decrypt(\$adPRIV, 0, length($adPRIV), $alg);
+    unless($adPRIV =~ /^itun/) { croak "Decryption of 'priv' atom failed." }
+    my $key = substr($adPRIV, 24, 16);
     $alg = new Crypt::Rijndael($key, Crypt::Rijndael::MODE_CBC);
+    $alg->set_iv( substr($adPRIV, 48, 16) );
     my $posit = $apMDAT + 4;
     foreach my $samplesize (@{$sampleTable}) {
-        $self->Decrypt(\$self->{sbuffer}, $posit, $samplesize, $alg, $iv);
+        $self->Decrypt(\$self->{sbuffer}, $posit, $samplesize, $alg);
         $posit += $samplesize;
     }
     substr($self->{sbuffer}, $apDRMS, length($AtomMP4A), $AtomMP4A);
     substr($self->{sbuffer}, $apSINF, length($AtomSINF), uc $AtomSINF);
-    open($outfh, '>', $outfile) or die "Cannot write to $outfile: $!";
+    $self->{sbuffer} =~ s/geID/xxID/;
+    open(my $outfh, '>', $outfile) or croak "Cannot write to $outfile: $!";
     binmode $outfh;
     print $outfh $self->{sbuffer};
 }
@@ -195,7 +192,7 @@ More descriptive alias for the B<DeDRMS> method.
         copyright infringement.
 
     [1] http://www.videolan.org/vlc/ [videolan.org]
-    [2] http://wiki.videolan.org/tiki-read_article.php?art icleId=5 [videolan.org]
+    [2] http://wiki.videolan.org/tiki-read_article.php?articleId=5 [videolan.org]
 
 
 =head1 AUTHOR

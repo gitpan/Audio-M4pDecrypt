@@ -6,5 +6,11 @@ Revision history for Perl module Audio::M4pDecrypt
 0.02 Fri April 30 2004
     - portability changes 
 
+0.03 Sat May 8 2004
+    - some loop optimization and minor tweaks
+    
+0.04 Tue June 15 2004
+    - upgraded to ITunes 4.6, added fix
+    
     
         
