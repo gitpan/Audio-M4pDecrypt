@@ -4,7 +4,7 @@ require 5.004;
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 use Crypt::Rijndael;
 use Digest::MD5 qw(md5);
@@ -21,14 +21,18 @@ sub new {
     foreach my $k (qw( strHome sPfix dirSep )) 
       { $self->{$k} = $args{$k} if $args{$k} }
     unless($self->{strHome}) {
-        no warnings;
-        require Win32::TieRegistry;
-        $self->{strHome} =
-           $Win32::TieRegistry::Registry->
-             {"HKEY_CURRENT_USER\\Volatile Environment\\\\APPDATA"} ||
-               die "Cannot get the APPDATA file directory.";
+        if($^O =~ /Mac|Unix|linux/i) { $self->{strHome} = '~' }
+        elsif ($^O =~ /Win/i) {
+            no warnings;
+            require Win32::TieRegistry;
+            $self->{strHome} =
+                $Win32::TieRegistry::Registry->
+                    {"HKEY_CURRENT_USER\\Volatile Environment\\\\APPDATA"} ||
+                        die "Cannot get the APPDATA file directory.";
+        }
+        else { die "Cannot find application home directory for drms." }
     }
-    $self->{sPfix} ||= ( ($^O =~ /Unix|linux/i) ? '.' : '' );
+    $self->{sPfix} ||= ( ($^O =~ /Unix|linux|Mac/i) ? '.' : '' );
     $self->{dirSep} ||= '/';
     return $self;
 }
@@ -84,9 +88,9 @@ sub GetSampleTable {
 sub DeDRMS {
     my ($self, $infile, $outfile) = @_;
     my($iv, $key, $infh, $outfh);
-    open($infh, '<', $infile) or die "Cannot read $infile: $!";
+    open($infh, '<', $infile) or die "Cannot open $infile: $!";
     binmode $infh;
-    read($infh, $self->{sbuffer}, -s $infile);
+    read($infh, $self->{sbuffer}, -s $infile) or die "Cannot get buffer: $!";
     close $infh;
     my $apDRMS = $self->GetAtomPos($AtomDRMS);
     my $apSINF = $self->GetAtomPos($AtomSINF);
@@ -101,7 +105,6 @@ sub DeDRMS {
     my $keyID   = unpack('L', $adKEY );
     my $strNAME = unpack('a', $adNAME);
     my $userKey = $self->GetUserKey($userID, $keyID);
-    my $name_len = index($adNAME, "\0");
     my $md5Hash = new Digest::MD5;
     $md5Hash->add( substr($adNAME, 0, index($adNAME, "\0")), $adIVIV );
     my $alg = new Crypt::Rijndael($userKey, Crypt::Rijndael::MODE_CBC);
@@ -135,12 +138,13 @@ Perl port of the DeDRMS.cs program by Jon Lech Johansen
 
 =head1 SYNOPSIS
 
-use Audio::M4pDecrypt;
+    use Audio::M4pDecrypt;
 
-my $mp4file = 'myfile';
-my $outfile = 'mydecodedfile';
-my $deDRMS = new Audio::M4pDecrypt;
-$deDRMS->DeDRMS($mp4file, $outfile);
+    my $outfile = 'mydecodedfile';
+    my $deDRMS = new Audio::M4pDecrypt;
+    $deDRMS->DeDRMS($mp4file, $outfile);
+
+    See also the M4pDecrypt.pl example program in this distribution.
 
 =head1 METHODS
 
@@ -156,24 +160,25 @@ my $cs_conparam = Audio::M4pDecrypt->new(
   dirSep => '/'
 );
 
-Optional arguments: strHome is the name of the directory containing the keyfile. 
-Under Windows, this will be found automatically if you have run the VLC player 
-on an iTunes file. sPfix is '.' for unix, otherwise generally nil. dirSep is the 
-char that separates directories, generally / or \.
+Optional arguments: strHome is the directory containing the keyfile directory.
+After running VLC on a .m4p file under Windows, MacOS X, and Linux, this should
+be found by the module automatically (APPDATA dir under Win32, ~/ under OS X and 
+Linux). sPfix is '.' for MacOS/*nix, otherwise nil. dirSep is the char that 
+separates directories, often /.
 
 =item B<DeDRMS>
 
 my $cs = new Audio::M4pDecrypt;
 $cs->DeDRMS('infilename', 'outfilename');
 
-Decode infilename, write to outfilename. Reading slurps of an entire file,
+Decode infilename, write to outfilename. Reading slurps up an entire file,
 so output can overwrite the same file without a problem, we hope. Backup first.
 
 =item B<DecryptFile>
 
 $cs->DecryptFile('infilename', 'outfilename');
 
-More decriptive alias for the B<DeDRMS> method.
+More descriptive alias for the B<DeDRMS> method.
 
 =back
 
@@ -195,8 +200,8 @@ More decriptive alias for the B<DeDRMS> method.
 
 =head1 AUTHOR
 
-Original C# version: Jon Lech Johansen <jon-vl@nanocrew.net>
-Perl version: William Herrera (wherrera@skylightview.com).
+    Original C# version: Jon Lech Johansen <jon-vl@nanocrew.net>
+    Perl version: William Herrera (wherrera@skylightview.com).
 
 =head1 SUPPORT
 
